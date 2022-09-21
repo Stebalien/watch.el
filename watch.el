@@ -274,6 +274,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
     (unless interval (user-error "Invalid interval %s" interval-s))
     interval))
 
+;;;###autoload
 (defun watch (command &optional interval)
   "Repeatedly run COMMAND at the specified INTERVAL."
   (interactive
