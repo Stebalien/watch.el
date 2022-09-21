@@ -36,6 +36,11 @@
 
 ;;; Code:
 
+(defgroup watch nil
+  "Watch customization group."
+  :version "0.0.1"
+  :group 'unix)
+
 (defcustom watch-color-filter
   (cdr-safe (seq-find (lambda (pair) (require (car pair) nil 'noerror))
                       '((xterm-color . xterm-color-filter)
