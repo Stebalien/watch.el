@@ -254,9 +254,14 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 
 (defvar watch-mode-map
   (let ((map (make-sparse-keymap)))
+    (suppress-keymap map)
+    (set-keymap-parent map special-mode-map)
+
     (define-key map "q" 'watch-quit)
+    (define-key map "g" 'watch-refresh)
     (define-key map "i" 'watch-set-interval)
-    (define-key map "p" 'watch-toggle)))
+    (define-key map "p" 'watch-toggle)
+    map))
 
 (define-derived-mode watch-mode special-mode "Watch"
   "A major mode for watch buffers.
