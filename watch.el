@@ -99,8 +99,8 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
                      (current-column)
                      (count-lines (point-min) (window-start))
                      (count-lines (window-start) (point-at-bol)))))
-           (get-buffer-window-list nil nil t)))
-         (max (point-max)))
+           (save-window-excursion ; otherwise, the cursor flashes
+             (get-buffer-window-list nil nil t)))))
      (prog1 (progn ,@body)
        (pcase-dolist (`(,win ,col ,start ,line) positions)
          (with-selected-window win
@@ -119,8 +119,9 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
         (with-current-buffer buf
           (when (buffer-narrowed-p)
             (watch--save-position
-             (widen)
-             (delete-region (point-min) (1+ max))))
+             (let ((max (point-max)))
+               (widen)
+               (delete-region (point-min) (1+ max)))))
           (save-excursion
             (goto-char (point-max))
             (insert "\n"))
