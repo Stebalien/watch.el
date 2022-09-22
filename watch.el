@@ -211,13 +211,20 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
       (cancel-timer watch--timer)
       (setq watch--timer nil))
     (make-process
-     :name watch-command
+     :name (watch--command-name)
      :noquery t
      :buffer (current-buffer)
-     :command (list "bash" "-c" watch-command)
+     :command (cond
+               ((listp watch-command) watch-command)
+               ((stringp watch-command) (list "bash" "-c" watch-command))
+               (t (user-error "Unexpected command type")))
      :filter #'watch--process-filter
      :sentinel #'watch--sentinel)
     (watch--update-title)))
+
+(defun watch--command-name (&optional command)
+  (unless command (setq command watch-command))
+  (if (listp command) (combine-and-quote-strings command) command))
 
 (defun watch--status-icon ()
   "Render the current status icon for the watched buffer."
@@ -235,7 +242,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
                 " Watch every "
                 (format-seconds "%x%hhr %mmin %ssec%z" watch-interval)
                 ": "
-                watch-command))
+                (watch--command-name)))
          (right-width (string-pixel-width (propertize right 'face 'header-line)))
          (sep (propertize " " 'display `(space :align-to (- right (,right-width))))))
     (setq header-line-format (concat left sep right))))
@@ -286,7 +293,8 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
   (interactive
    (list (read-shell-command "Watch: ")
          (watch--read-interval)))
-  (let ((buf (generate-new-buffer (concat "*watch: " command))))
+  (let* ((buf (generate-new-buffer
+               (concat "*watch: " (watch--command-name command)))))
     (with-current-buffer buf
       (watch-mode)
       (setq watch-interval (or interval 2)
