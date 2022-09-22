@@ -266,7 +266,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 
 (define-derived-mode watch-mode special-mode "Watch"
   "A major mode for watch buffers.
-\\{speedbar-mode-map}"
+\\{watch-mode-map}"
   :interactive nil
   (add-hook 'activate-mark-hook 'watch--inhibit 0 'local)
   (add-hook 'deactivate-mark-hook 'watch--uninhibit 0 'local)
