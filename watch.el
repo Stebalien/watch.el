@@ -51,6 +51,26 @@
           (function :tag "Filter Function")
           (const :tag "None" nil)))
 
+(defcustom watch-paused-indicator "<P>"
+  "Status string to display when the watch buffer is paused."
+  :group 'watch
+  :type 'string)
+
+(defcustom watch-running-indicator "<R>"
+  "Status string to display when the watched command is actively running."
+  :group 'watch
+  :type 'string)
+
+(defcustom watch-sleeping-indicator "<S>"
+  "Status string to display when the watch buffer is sleeping between runs."
+  :group 'watch
+  :type 'string)
+
+(defcustom watch-failed-indicator "<!>"
+  "Status string to display when the watched command exists with a non-zero status."
+  :group 'watch
+  :type 'string)
+
 (defvar-local watch-interval 2
   "Watch interval for the current buffer.")
 
@@ -98,7 +118,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
                (list win
                      (current-column)
                      (count-lines (point-min) (window-start))
-                     (count-lines (window-start) (point-at-bol)))))
+                     (count-lines (window-start) (line-beginning-position)))))
            (save-window-excursion ; otherwise, the cursor flashes
              (get-buffer-window-list nil nil t)))))
      (prog1 (progn ,@body)
@@ -155,7 +175,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 
 (defun watch-pause ()
   "Pause watching."
-  (interactive nil '(watch-mode))
+  (interactive nil watch-mode)
   (watch--assert-mode)
   (unless watch--paused
     (setq watch--paused t)
@@ -163,7 +183,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 
 (defun watch-resume ()
   "Resume watching."
-  (interactive nil '(watch-mode))
+  (interactive nil watch-mode)
   (watch--assert-mode)
   (when watch--paused
     (setq watch--paused nil)
@@ -171,13 +191,13 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 
 (defun watch-toggle ()
   "Toggle watching."
-  (interactive nil '(watch-mode))
+  (interactive nil watch-mode)
   (watch--assert-mode)
   (if watch--paused (watch-resume) (watch-pause)))
 
 (defun watch-refresh ()
   "Immediately refresh the watch buffer."
-  (interactive nil '(watch-mode))
+  (interactive nil watch-mode)
   (watch--assert-mode)
   (unless watch--inhibited
     (if-let (proc (get-buffer-process (current-buffer)))
@@ -222,17 +242,21 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
      :sentinel #'watch--sentinel)
     (watch--update-title)))
 
-(defun watch--command-name (&optional command)
-  (unless command (setq command watch-command))
+(defun watch--format-command-name (command)
+  "Format COMMAND as a command name for display."
   (if (listp command) (combine-and-quote-strings command) command))
+
+(defun watch--command-name ()
+  "Return the current command name."
+  (watch--format-command-name watch-command))
 
 (defun watch--status-icon ()
   "Render the current status icon for the watched buffer."
   (cond
-   ((or watch--inhibited watch--paused) "⏸")
-   ((get-buffer-process (current-buffer)) "↺")
-   (watch--failed "⚠")
-   (t "⯈")))
+   ((or watch--inhibited watch--paused) watch-paused-indicator)
+   ((get-buffer-process (current-buffer)) watch-running-indicator)
+   (watch--failed watch-failed-indicator)
+   (t watch-sleeping-indicator)))
 
 (defun watch--update-title ()
   "Update the watch buffer title."
@@ -249,27 +273,25 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 
 (defun watch-quit ()
   "Quit the watch buffer."
-  (interactive)
+  (interactive nil watch-mode)
   (quit-window 'kill))
 
 (defun watch-set-interval (interval)
   "Change the watch interval to INTERVAL."
-  (interactive (list (watch--read-interval)))
+  (interactive (list (watch--read-interval)) watch-mode)
   (setq watch-interval interval)
   (if watch--paused
       (watch--update-title)
     (watch-refresh)))
 
-(defvar watch-mode-map
-  (let ((map (make-sparse-keymap)))
-    (suppress-keymap map)
-    (set-keymap-parent map special-mode-map)
-
-    (define-key map "q" 'watch-quit)
-    (define-key map "g" 'watch-refresh)
-    (define-key map "i" 'watch-set-interval)
-    (define-key map "p" 'watch-toggle)
-    map))
+(defvar-keymap watch-mode-map
+  :doc "Keymap for watch-mode."
+  :suppress t
+  :parent special-mode-map
+  "q" #'watch-quit
+  "g" #'watch-refresh
+  "i" #'watch-set-interval
+  "p" #'watch-toggle)
 
 (define-derived-mode watch-mode special-mode "Watch"
   "A major mode for watch buffers.
@@ -294,7 +316,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
    (list (read-shell-command "Watch: ")
          (watch--read-interval)))
   (let* ((buf (generate-new-buffer
-               (concat "*watch: " (watch--command-name command)))))
+               (concat "*watch: " (watch--format-command-name command)))))
     (with-current-buffer buf
       (watch-mode)
       (setq watch-interval (or interval 2)
