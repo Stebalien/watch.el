@@ -92,7 +92,7 @@
 (defvar-local watch--failed nil
   "Non-nil if the last watch command failed.")
 
-(defvar-local watch--pending-output nil
+(defvar-local watch--pending-output-buffer nil
   "Pending command output.")
 
 (defun watch--assert-mode ()
@@ -101,32 +101,16 @@
     (user-error "Command may only be run in a `watch' buffer")))
 
 (defun watch--process-filter (proc text)
-  "Process filter for the watched PROC, recording TEXT."
+  "Process filter for the watched PROC, recording TEXT in a temporary buffer."
   (with-current-buffer (process-buffer proc)
     (when watch-color-filter
       (setq text (funcall watch-color-filter text)))
-    (push text watch--pending-output)))
-
-(defmacro watch--save-position (&rest body)
-  "Save line, column, start; execute BODY; restore those things."
-  `(let ((positions
-          (mapcar
-           (lambda (win)
-             (with-selected-window win
-               (list win
-                     (current-column)
-                     (count-lines (point-min) (window-start))
-                     (count-lines (window-start) (line-beginning-position)))))
-           (save-window-excursion ; otherwise, the cursor flashes
-             (get-buffer-window-list nil nil t)))))
-     (prog1 (progn ,@body)
-       (pcase-dolist (`(,win ,col ,start ,line) positions)
-         (with-selected-window win
-           (goto-char (point-min))
-           (forward-line start)
-           (set-window-start nil (point))
-           (forward-line line)
-           (move-to-column col))))))
+    (unless (buffer-live-p watch--pending-output-buffer)
+      (setq watch--pending-output-buffer
+            (generate-new-buffer (concat " *watch-pending: %s" (watch--command-name)) t)))
+    (with-current-buffer watch--pending-output-buffer
+      (goto-char (point-max))
+      (insert text))))
 
 (defun watch--sentinel (proc _)
   "Process sentinel for the watched PROC."
@@ -135,11 +119,12 @@
           (inhibit-read-only t))
       (when (buffer-live-p buf)
         (with-current-buffer buf
-          (watch--save-position
-           (erase-buffer)
-           (apply #'insert (nreverse watch--pending-output)))
-          (setq watch--pending-output nil
-                watch--last-update (current-time-string)
+          (if (not (buffer-live-p watch--pending-output-buffer))
+              (erase-buffer)
+            (replace-buffer-contents watch--pending-output-buffer)
+            (with-current-buffer watch--pending-output-buffer
+              (erase-buffer)))
+          (setq watch--last-update (current-time-string)
                 watch--failed (/= (process-exit-status proc) 0))
           (unless (or watch--paused watch--inhibited)
             (when watch--timer (cancel-timer watch--timer))
@@ -156,7 +141,9 @@
     (cancel-timer watch--timer)
     (setq watch--timer nil))
   ;; Clear any progress so far.
-  (setq watch--pending-output nil)
+  (when (buffer-live-p watch--pending-output-buffer)
+    (with-current-buffer watch--pending-output-buffer
+      (erase-buffer)))
   ;; Kill the process
   (ignore-errors (delete-process))
   (setq watch--failed nil)
@@ -197,6 +184,12 @@
   (unless watch--inhibited
     (setq watch--inhibited t)
     (watch--stop)))
+
+(defun watch--on-kill-buffer ()
+  "Kill the pending output buffer."
+  (when (buffer-live-p watch--pending-output-buffer)
+    (kill-buffer watch--pending-output-buffer)
+    (setq watch--pending-output-buffer nil)))
 
 (defun watch--uninhibit ()
   "Uninhibit updates to the watch buffer."
@@ -278,6 +271,7 @@
   "A major mode for watch buffers.
 \\{watch-mode-map}"
   :interactive nil
+  (add-hook 'kill-buffer-hook 'watch--on-kill-buffer 0 'local)
   (add-hook 'activate-mark-hook 'watch--inhibit 0 'local)
   (add-hook 'deactivate-mark-hook 'watch--uninhibit 0 'local)
   (add-hook 'kill-buffer-hook #'watch--stop 0 'local))
