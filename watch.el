@@ -92,22 +92,20 @@
 (defvar-local watch--failed nil
   "Non-nil if the last watch command failed.")
 
+(defvar-local watch--pending-output nil
+  "Pending command output.")
+
 (defun watch--assert-mode ()
   "Asserts that the current buffer is a `watch-mode' buffer."
   (unless (eq major-mode 'watch-mode)
     (user-error "Command may only be run in a `watch' buffer")))
 
 (defun watch--process-filter (proc text)
-  "Process filter for the watched PROC.
-
-Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
+  "Process filter for the watched PROC, recording TEXT."
   (with-current-buffer (process-buffer proc)
-    (save-excursion
-      (let ((inhibit-read-only t))
-        (save-restriction
-          (widen)
-          (goto-char (point-max))
-          (insert (funcall (or watch-color-filter #'identity) text)))))))
+    (when watch-color-filter
+      (setq text (funcall watch-color-filter text)))
+    (push text watch--pending-output)))
 
 (defmacro watch--save-position (&rest body)
   "Save line, column, start; execute BODY; restore those things."
@@ -137,15 +135,11 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
           (inhibit-read-only t))
       (when (buffer-live-p buf)
         (with-current-buffer buf
-          (when (buffer-narrowed-p)
-            (watch--save-position
-             (let ((max (point-max)))
-               (widen)
-               (delete-region (point-min) (1+ max)))))
-          (save-excursion
-            (goto-char (point-max))
-            (insert "\n"))
-          (setq watch--last-update (current-time-string)
+          (watch--save-position
+           (erase-buffer)
+           (apply #'insert (nreverse watch--pending-output)))
+          (setq watch--pending-output nil
+                watch--last-update (current-time-string)
                 watch--failed (/= (process-exit-status proc) 0))
           (unless (or watch--paused watch--inhibited)
             (when watch--timer (cancel-timer watch--timer))
@@ -162,11 +156,7 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
     (cancel-timer watch--timer)
     (setq watch--timer nil))
   ;; Clear any progress so far.
-  (when (buffer-narrowed-p)
-    (let ((inhibit-read-only t)
-          (point (point-max)))
-      (widen)
-      (delete-region point (point-max))))
+  (setq watch--pending-output nil)
   ;; Kill the process
   (ignore-errors (delete-process))
   (setq watch--failed nil)
@@ -199,15 +189,8 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
   "Immediately refresh the watch buffer."
   (interactive nil watch-mode)
   (watch--assert-mode)
-  (unless watch--inhibited
-    (if-let (proc (get-buffer-process (current-buffer)))
-        (let ((inhibit-read-only t))
-          (when (buffer-narrowed-p)
-            (let ((max (1+ (point-max))))
-              (widen)
-              (delete-region (point-min) max))))
-      (watch--start-process))
-    (watch--update-title)))
+  (unless (and watch--inhibited (process-live-p (get-buffer-process (current-buffer))))
+    (watch--start-process)))
 
 (defun watch--inhibit ()
   "Inhibit updates to the watch buffer."
@@ -225,8 +208,6 @@ Inserts TEXT at the end of the buffer, temporarily widening it if narrowed."
 (defun watch--start-process (&optional buf)
   "Start the watched process in BUF (defaults to the current buffer)."
   (with-current-buffer (or buf (current-buffer))
-    (when (> (point-max) (point-min))
-      (narrow-to-region (point-min) (1- (point-max))))
     (when watch--timer
       (cancel-timer watch--timer)
       (setq watch--timer nil))
