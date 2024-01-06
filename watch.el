@@ -187,9 +187,11 @@
 
 (defun watch--on-kill-buffer ()
   "Kill the pending output buffer."
+  (when watch--timer
+    (cancel-timer watch--timer))
   (when (buffer-live-p watch--pending-output-buffer)
-    (kill-buffer watch--pending-output-buffer)
-    (setq watch--pending-output-buffer nil)))
+    (kill-buffer watch--pending-output-buffer))
+  (ignore-errors (delete-process)))
 
 (defun watch--uninhibit ()
   "Uninhibit updates to the watch buffer."
@@ -273,8 +275,7 @@
   :interactive nil
   (add-hook 'kill-buffer-hook 'watch--on-kill-buffer 0 'local)
   (add-hook 'activate-mark-hook 'watch--inhibit 0 'local)
-  (add-hook 'deactivate-mark-hook 'watch--uninhibit 0 'local)
-  (add-hook 'kill-buffer-hook #'watch--stop 0 'local))
+  (add-hook 'deactivate-mark-hook 'watch--uninhibit 0 'local))
 
 (defun watch--read-interval ()
   "Read a watch interval from the user."
