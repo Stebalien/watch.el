@@ -5,7 +5,7 @@
 ;; Author: Steven Allen <steven@stebalien.com>
 ;; URL: https://github.com/Stebalien/watch.el
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "28.1"))
+;; Package-Requires: ((emacs "29.1"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -41,11 +41,13 @@
   :version "0.0.1"
   :group 'unix)
 
-(defcustom watch-color-filter
-  (cdr-safe (seq-find (lambda (pair) (require (car pair) nil 'noerror))
-                      '((xterm-color . xterm-color-filter)
-                        (ansi-color . ansi-color-filter-apply))))
-  "Color filter for command output."
+(defcustom watch-colorize-buffer
+  (cdr-safe (seq-find
+             (lambda (pair) (require (car pair) nil 'noerror))
+             '((xterm-color . xterm-color-filter)
+               (ansi-color . (lambda () (ansi-color-apply-on-region
+                                    (point-min) (point-max)))))))
+  "Color function for command output."
   :group 'watch
   :type '(choice
           (function :tag "Filter Function")
@@ -103,8 +105,6 @@
 (defun watch--process-filter (proc text)
   "Process filter for the watched PROC, recording TEXT in a temporary buffer."
   (with-current-buffer (process-buffer proc)
-    (when watch-color-filter
-      (setq text (funcall watch-color-filter text)))
     (unless (buffer-live-p watch--pending-output-buffer)
       (setq watch--pending-output-buffer
             (generate-new-buffer (concat " *watch-pending: %s" (watch--command-name)) t)))
@@ -121,6 +121,9 @@
         (with-current-buffer buf
           (if (not (buffer-live-p watch--pending-output-buffer))
               (erase-buffer)
+            (when watch-colorize-buffer
+              (with-current-buffer watch--pending-output-buffer
+                (funcall watch-colorize-buffer)))
             (replace-buffer-contents watch--pending-output-buffer)
             (with-current-buffer watch--pending-output-buffer
               (erase-buffer)))
