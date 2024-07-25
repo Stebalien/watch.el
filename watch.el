@@ -210,6 +210,7 @@
      :name (watch--command-name)
      :noquery t
      :buffer (current-buffer)
+     :file-handler t
      :command (cond
                ((listp watch-command) watch-command)
                ((stringp watch-command) (list "bash" "-c" watch-command))
