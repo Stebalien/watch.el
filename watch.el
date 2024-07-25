@@ -121,10 +121,9 @@
         (with-current-buffer buf
           (if (not (buffer-live-p watch--pending-output-buffer))
               (erase-buffer)
-            (when watch-colorize-buffer
-              (with-current-buffer watch--pending-output-buffer
-                (funcall watch-colorize-buffer)))
             (replace-buffer-contents watch--pending-output-buffer)
+            (when watch-colorize-buffer
+              (funcall watch-colorize-buffer))
             (with-current-buffer watch--pending-output-buffer
               (erase-buffer)))
           (setq watch--last-update (current-time-string)
