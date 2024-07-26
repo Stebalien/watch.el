@@ -302,4 +302,6 @@
             watch-command command)
       (watch-resume))
     (display-buffer buf)))
+
+(provide 'watch)
 ;;; watch.el ends here
