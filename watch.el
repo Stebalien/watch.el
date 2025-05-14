@@ -215,7 +215,7 @@
      :file-handler t
      :command (cond
                ((listp watch-command) watch-command)
-               ((stringp watch-command) (list "bash" "-c" watch-command))
+               ((stringp watch-command) (list shell-file-name shell-command-switch watch-command))
                (t (user-error "Unexpected command type")))
      :filter #'watch--process-filter
      :sentinel #'watch--sentinel)
